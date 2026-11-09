@@ -1,15 +1,19 @@
 # src/app.py
 import os
+import sys
+from pathlib import Path
 import boto3
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 
-try:
-    from src.graph import create_bi_analyst_graph
-except ImportError:
-    from graph import create_bi_analyst_graph
+# Ensure project root is in sys.path so module imports resolve cleanly across environments
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.graph import create_bi_analyst_graph
 
 # Load ONLY non-AWS 3rd-party secrets (like Supabase) from .env if present
 load_dotenv()
