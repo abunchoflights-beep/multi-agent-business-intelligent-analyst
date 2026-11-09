@@ -1,0 +1,23 @@
+# Virtual environment (Node: node_modules/)
+venv/
+.venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment secrets (DO NOT COMMIT!)
+.env
+.env.local
+
+# AWS Key pairs
+*.pem
+
+# OS / Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
