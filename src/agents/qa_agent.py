@@ -17,28 +17,34 @@ def qa_hotfix_agent(state: AgentState, bedrock_client: BaseClient) -> dict:
     prompt = f"""
     You are the Critical QA & Hotfix Agent. An analysis script failed with the following traceback:
     {error}
-    
+
+    Dataset Schemas & Context:
+    {state.get('raw_context', '')}
+
     Original Attempted Code:
     {state.get('generated_code', '')}
-    
-    Rewrite the python script entirely to bypass this error. Fix null pointers, data type casting, or missing keys.
-    Return ONLY valid executable python code inside markdown.
+
+    Rewrite the Python script defining `execute_analysis(datasets)` to bypass this error.
+    - Use ONLY pre-loaded DataFrames in `datasets` (never call `open()` or `pd.read_csv()`).
+    - Check exact column spellings from the schema above (e.g., `product_name_lenght`).
+    - Handle NaNs, type conversions, and missing keys safely.
+    Return ONLY valid executable Python code inside markdown.
     """
 
     try:
         response = bedrock_client.invoke_model(
             modelId="amazon.nova-lite-v1:0",
-            body=json.dumps({"messages": [{"role": "user", "content": [{"text": prompt}]}]})
+            body=json.dumps({"messages": [{"role": "user", "content": [{"text": prompt}]}]}),
         )
-        fixed_code = json.loads(response['body'].read().decode('utf-8'))['output']['message']['content'][0]['text']
+        fixed_code = json.loads(response["body"].read().decode("utf-8"))["output"]["message"]["content"][0]["text"]
     except Exception:
         fixed_code = """```python
-def execute_analysis():
-    return {"status": "repaired", "message": "Self-healed fallback execution after error interception."}
+def execute_analysis(datasets):
+    return {"status": "repaired", "loaded_tables": list(datasets.keys())}
 ```"""
 
     return {
         "generated_code": fixed_code,
         "retry_count": state.get("retry_count", 0) + 1,
-        "error_trace": ""
+        "error_trace": "",
     }

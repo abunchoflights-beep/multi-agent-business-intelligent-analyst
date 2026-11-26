@@ -1,5 +1,6 @@
 # src/graph.py
 from functools import partial
+from typing import Optional
 from langgraph.graph import StateGraph, END
 from botocore.client import BaseClient
 
@@ -31,14 +32,20 @@ def should_continue(state: AgentState) -> str:
     return END
 
 
-def create_bi_analyst_graph(bedrock_client: BaseClient):
+def create_bi_analyst_graph(
+    bedrock_client: BaseClient,
+    s3_client: Optional[BaseClient] = None,
+):
     """
-    Assembles the cyclic multi-agent graph with AWS Bedrock client curried into each agent node.
+    Assembles the cyclic multi-agent graph with AWS Bedrock and S3 clients curried into nodes.
     """
     workflow = StateGraph(AgentState)
 
-    # 1. Register Nodes with Bedrock dependency injection
-    workflow.add_node("router", partial(intake_router_agent, bedrock_client=bedrock_client))
+    # 1. Register Nodes with dependency injection (only trusted nodes receive AWS clients)
+    workflow.add_node(
+        "router",
+        partial(intake_router_agent, bedrock_client=bedrock_client, s3_client=s3_client),
+    )
     workflow.add_node("analyst", partial(analytical_agent, bedrock_client=bedrock_client))
     workflow.add_node("executor", code_execution_node)
     workflow.add_node("qa_hotfix", partial(qa_hotfix_agent, bedrock_client=bedrock_client))
@@ -54,12 +61,11 @@ def create_bi_analyst_graph(bedrock_client: BaseClient):
         should_continue,
         {
             "qa_hotfix": "qa_hotfix",
-            END: END
-        }
+            END: END,
+        },
     )
 
     # 4. Route repaired code back to executor
     workflow.add_edge("qa_hotfix", "executor")
 
     return workflow.compile()
-

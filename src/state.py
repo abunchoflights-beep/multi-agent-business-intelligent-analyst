@@ -1,10 +1,13 @@
-from typing import TypedDict, List, Annotated
-import operator
+from typing import TypedDict, List
+
 
 class AgentState(TypedDict):
     session_id: str
     user_query: str
     file_path: str
+    route: str
+    selected_tables: List[str]
+    data_dir: str
     raw_context: str
     generated_code: str
     execution_result: str
