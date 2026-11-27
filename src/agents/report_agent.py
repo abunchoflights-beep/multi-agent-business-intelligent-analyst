@@ -9,10 +9,11 @@ except ImportError:
 
 
 def report_synthesis_agent(state: AgentState, bedrock_client: BaseClient) -> dict:
-    """Synthesizes raw sandbox execution output into a concise executive BI summary."""
+    """Synthesizes sandbox execution metrics and/or pgvector review matches into an executive BI summary."""
     error_trace = state.get("error_trace", "")
     retry_count = state.get("retry_count", 0)
     execution_result = state.get("execution_result", "")
+    rag_context = state.get("rag_context", "")
 
     if error_trace:
         return {
@@ -24,18 +25,22 @@ def report_synthesis_agent(state: AgentState, bedrock_client: BaseClient) -> dic
 
     prompt = f"""
     You are an Executive Business Intelligence Advisor.
-    Summarize the verified analytical output below into a crisp executive insight for the user.
+    Synthesize the verified evidence below into a crisp executive insight answering the user's question.
 
     Rules:
-    - Cite ONLY exact numbers, categories, and facts present in the Verified Execution Output. Never invent metrics.
+    - Cite ONLY exact numbers, categories, themes, and review details present in the evidence below. Never invent metrics.
+    - If Portuguese customer reviews are provided, summarize the recurring complaint or praise themes in English and cite representative categories/scores.
     - Lead with a 1-sentence direct answer, followed by 2-4 concise bullet points of key takeaways.
-    - Keep it under 180 words.
+    - Keep it under 220 words.
 
     User Question: {state.get('user_query', '')}
-    Routing Context: {state.get('route', 'compute')} (tables: {state.get('selected_tables', [])}, QA retries: {retry_count})
+    Route: {state.get('route', 'compute')} (tables: {state.get('selected_tables', [])}, QA retries: {retry_count})
 
-    Verified Execution Output:
-    {execution_result}
+    Verified Execution Output (Quantitative):
+    {execution_result or "N/A (pure semantic RAG route)"}
+
+    Semantic Review Matches (Qualitative via Titan V2 + pgvector):
+    {rag_context or "N/A"}
     """
 
     try:
@@ -48,6 +53,11 @@ def report_synthesis_agent(state: AgentState, bedrock_client: BaseClient) -> dic
         )
         summary = json.loads(response["body"].read().decode("utf-8"))["output"]["message"]["content"][0]["text"].strip()
     except Exception:
-        summary = f"BI Analysis Result:\n{execution_result}"
+        parts = []
+        if execution_result:
+            parts.append(f"BI Analysis Result:\n{execution_result}")
+        if rag_context:
+            parts.append(rag_context)
+        summary = "\n\n".join(parts) if parts else "No output generated."
 
     return {"final_report": summary}
