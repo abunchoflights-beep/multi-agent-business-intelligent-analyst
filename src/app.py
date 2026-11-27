@@ -75,6 +75,8 @@ class AnalysisRequest(BaseModel):
 class AnalysisResponse(BaseModel):
     session_id: str
     user_query: str
+    route: str = "compute"
+    selected_tables: list[str] = []
     execution_result: str
     final_report: str
     generated_code: str
@@ -124,6 +126,8 @@ def analyze_data(request: AnalysisRequest):
     return AnalysisResponse(
         session_id=final_state.get("session_id", request.session_id),
         user_query=final_state.get("user_query", request.user_query),
+        route=final_state.get("route", "compute"),
+        selected_tables=final_state.get("selected_tables", []),
         execution_result=final_state.get("execution_result", ""),
         final_report=final_state.get("final_report", ""),
         generated_code=final_state.get("generated_code", ""),
