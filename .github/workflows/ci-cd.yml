@@ -1,0 +1,72 @@
+name: Backend CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint, Compile & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "requirements.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile check
+        run: python -m compileall -q src scripts tests
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: FastAPI app import smoke test
+        env:
+          AWS_REGION: us-east-2
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          python -c "import src.app as m; assert m.app.title == 'Multi-Agent BI Analyst'; print('App loaded cleanly')"
+
+  deploy:
+    name: Deploy to AWS EC2
+    needs: ci
+    # Gated behind repository variable ENABLE_EC2_DEPLOY=true so merges to main
+    # don't fail while EC2 is stopped or before EC2_HOST / EC2_SSH_KEY secrets are set.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_EC2_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy.pem
+          chmod 600 ~/.ssh/ec2_deploy.pem
+
+      - name: Pull latest main and restart systemd service on EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER || 'ubuntu' }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/ec2_deploy.pem "$EC2_USER@$EC2_HOST" "
+            cd /home/ubuntu/bi-analyst-backend &&
+            git pull origin main &&
+            venv/bin/pip install -r requirements.txt &&
+            sudo systemctl restart bi-analyst &&
+            sleep 3 &&
+            curl -sf http://127.0.0.1:8000/health
+          "
