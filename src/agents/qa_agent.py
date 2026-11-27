@@ -27,6 +27,7 @@ def qa_hotfix_agent(state: AgentState, bedrock_client: BaseClient) -> dict:
     Rewrite the Python script defining `execute_analysis(datasets)` to bypass this error.
     - Use ONLY pre-loaded DataFrames in `datasets` (never call `open()` or `pd.read_csv()`).
     - Check exact column spellings from the schema above (e.g., `product_name_lenght`).
+    - Keep analytical formulas accurate: per-group rates must divide by that group's own denominator, and datetime comparisons should compare parsed timestamps directly.
     - Handle NaNs, type conversions, and missing keys safely.
     Return ONLY valid executable Python code inside markdown.
     """
