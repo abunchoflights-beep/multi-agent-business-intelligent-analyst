@@ -29,10 +29,10 @@ class TestDataLoader(unittest.TestCase):
         fake_s3 = MagicMock()
 
         def fake_download(bucket, key, dest_path):
-            Path(dest_path).write_text(
-                "product_category_name,product_category_name_english\n"
-                "beleza_saude,health_beauty\n",
-                encoding="utf-8",
+            # Include a UTF-8 BOM to verify build_schema_context strips \ufeff cleanly
+            Path(dest_path).write_bytes(
+                b"\xef\xbb\xbfproduct_category_name,product_category_name_english\n"
+                b"beleza_saude,health_beauty\n"
             )
 
         fake_s3.download_file.side_effect = fake_download
@@ -65,6 +65,8 @@ class TestDataLoader(unittest.TestCase):
 
             schema = build_schema_context(cache_dir, ["category_translation"])
             self.assertIn("datasets['category_translation']", schema)
+            self.assertIn("'product_category_name'", schema)
+            self.assertNotIn("\ufeff", schema)
             self.assertIn("product_category_name_english", schema)
             self.assertIn("beleza_saude", schema)
 

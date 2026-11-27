@@ -119,7 +119,7 @@ def build_schema_context(cache_dir: Path, tables: List[str], sample_rows: int = 
         if not csv_path.exists():
             continue
 
-        with csv_path.open("r", encoding="utf-8", errors="replace", newline="") as f:
+        with csv_path.open("r", encoding="utf-8-sig", errors="replace", newline="") as f:
             reader = csv.reader(f)
             headers = next(reader, [])
             samples = []
