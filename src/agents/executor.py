@@ -191,9 +191,9 @@ def _load_datasets(table_files):
         if os.path.basename(file_path) not in ALLOWED_FILENAMES:
             raise PermissionError(f"Blocked unapproved file path: {file_path}")
         if pd is not None:
-            datasets[table_name] = pd.read_csv(file_path)
+            datasets[table_name] = pd.read_csv(file_path, encoding="utf-8-sig")
         else:
-            with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as f:
+            with open(file_path, "r", encoding="utf-8-sig", errors="replace", newline="") as f:
                 datasets[table_name] = list(csv.DictReader(f))
     return datasets
 

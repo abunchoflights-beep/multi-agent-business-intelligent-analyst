@@ -31,11 +31,11 @@ def execute_analysis():
     def test_injects_preloaded_datasets_into_execute_analysis(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             csv_path = Path(tmp_dir) / "product_category_name_translation.csv"
-            csv_path.write_text(
-                "product_category_name,product_category_name_english\n"
-                "beleza_saude,health_beauty\n"
-                "informatica_acessorios,computers_accessories\n",
-                encoding="utf-8",
+            # Write with UTF-8 BOM (\xef\xbb\xbf) to verify sandbox strips BOM automatically
+            csv_path.write_bytes(
+                b"\xef\xbb\xbfproduct_category_name,product_category_name_english\n"
+                b"beleza_saude,health_beauty\n"
+                b"informatica_acessorios,computers_accessories\n"
             )
             state = {
                 "data_dir": tmp_dir,
@@ -43,12 +43,14 @@ def execute_analysis():
                 "generated_code": """```python
 def execute_analysis(datasets):
     rows = datasets["category_translation"]
-    return {"row_count": len(rows)}
+    first_col = list(rows[0].keys())[0] if isinstance(rows, list) else rows.columns[0]
+    return {"row_count": len(rows), "first_col": first_col}
 ```""",
             }
             out = code_execution_node(state)
             self.assertEqual(out["error_trace"], "")
             self.assertIn('"row_count": 2', out["execution_result"])
+            self.assertIn('"first_col": "product_category_name"', out["execution_result"])
 
     def test_blocks_pandas_read_csv_and_read_json(self):
         for expr in (
