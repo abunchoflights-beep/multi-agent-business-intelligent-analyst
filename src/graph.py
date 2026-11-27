@@ -1,8 +1,9 @@
 # src/graph.py
 from functools import partial
 from typing import Optional
-from langgraph.graph import StateGraph, END
 from botocore.client import BaseClient
+from langgraph.graph import END, StateGraph
+from supabase import Client
 
 try:
     from src.state import AgentState
@@ -18,6 +19,16 @@ except ImportError:
     from agents.qa_agent import qa_hotfix_agent
     from agents.executor import code_execution_node
     from agents.report_agent import report_synthesis_agent
+
+
+def route_after_intake(state: AgentState) -> str:
+    """
+    Skips Python code execution when the query is pure semantic RAG and pgvector
+    already returned matched reviews; otherwise sends schemas to the Analyst Agent.
+    """
+    if state.get("route") == "rag" and state.get("rag_context"):
+        return "reporter"
+    return "analyst"
 
 
 def should_continue(state: AgentState) -> str:
@@ -37,28 +48,41 @@ def should_continue(state: AgentState) -> str:
 def create_bi_analyst_graph(
     bedrock_client: BaseClient,
     s3_client: Optional[BaseClient] = None,
+    supabase_client: Optional[Client] = None,
 ):
     """
-    Assembles the cyclic multi-agent graph with AWS Bedrock and S3 clients curried into nodes.
+    Assembles the multi-agent graph with AWS Bedrock, S3, and Supabase clients curried into trusted nodes.
     """
     workflow = StateGraph(AgentState)
 
-    # 1. Register Nodes with dependency injection (only trusted nodes receive AWS clients)
+    # 1. Register Nodes with dependency injection (only trusted nodes receive AWS/DB clients)
     workflow.add_node(
         "router",
-        partial(intake_router_agent, bedrock_client=bedrock_client, s3_client=s3_client),
+        partial(
+            intake_router_agent,
+            bedrock_client=bedrock_client,
+            s3_client=s3_client,
+            supabase_client=supabase_client,
+        ),
     )
     workflow.add_node("analyst", partial(analytical_agent, bedrock_client=bedrock_client))
     workflow.add_node("executor", code_execution_node)
     workflow.add_node("qa_hotfix", partial(qa_hotfix_agent, bedrock_client=bedrock_client))
     workflow.add_node("reporter", partial(report_synthesis_agent, bedrock_client=bedrock_client))
 
-    # 2. Define standard forward flow
+    # 2. Entry & intake routing (pure RAG -> reporter; compute/hybrid -> analyst -> executor)
     workflow.set_entry_point("router")
-    workflow.add_edge("router", "analyst")
+    workflow.add_conditional_edges(
+        "router",
+        route_after_intake,
+        {
+            "reporter": "reporter",
+            "analyst": "analyst",
+        },
+    )
     workflow.add_edge("analyst", "executor")
 
-    # 3. Define conditional self-healing loop -> executive report synthesis
+    # 3. Conditional self-healing loop -> executive report synthesis
     workflow.add_conditional_edges(
         "executor",
         should_continue,

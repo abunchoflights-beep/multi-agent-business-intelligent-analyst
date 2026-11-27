@@ -52,14 +52,14 @@ if supabase_url and supabase_key:
         supabase = None
 
 # Initialize the self-correcting LangGraph multi-agent workflow
-bi_analyst_graph = create_bi_analyst_graph(bedrock_runtime, s3_client)
+bi_analyst_graph = create_bi_analyst_graph(bedrock_runtime, s3_client, supabase)
 
 
 class AnalysisRequest(BaseModel):
     user_query: str = Field(
         ...,
         description="The business question or analytical request",
-        example="Which product categories have the highest late-delivery rate?",
+        example="Which 5 product categories have the worst late-delivery rate?",
     )
     file_path: str = Field(
         default="",
@@ -78,6 +78,7 @@ class AnalysisResponse(BaseModel):
     route: str = "compute"
     selected_tables: list[str] = []
     execution_result: str
+    rag_context: str = ""
     final_report: str
     generated_code: str
     retry_count: int
@@ -101,10 +102,11 @@ def health_check():
 def analyze_data(request: AnalysisRequest):
     """
     Executes the multi-agent BI workflow:
-    1. Router Agent: Classifies intent, picks Olist tables, caches CSVs from S3.
+    1. Router Agent: Classifies intent ('compute', 'rag', 'hybrid'), queries pgvector and/or caches S3 CSVs.
     2. Analyst Agent: Generates Python transformation code over pre-loaded `datasets`.
     3. Sandbox Executor: Runs code in an isolated, credential-free subprocess.
     4. QA Hotfix Loop: Catches any runtime exceptions and heals the code.
+    5. Report Agent: Synthesizes quantitative + semantic evidence into an executive summary.
     """
     initial_state = {
         "session_id": request.session_id,
@@ -114,6 +116,7 @@ def analyze_data(request: AnalysisRequest):
         "selected_tables": [],
         "data_dir": "",
         "raw_context": "",
+        "rag_context": "",
         "generated_code": "",
         "execution_result": "",
         "final_report": "",
@@ -129,6 +132,7 @@ def analyze_data(request: AnalysisRequest):
         route=final_state.get("route", "compute"),
         selected_tables=final_state.get("selected_tables", []),
         execution_result=final_state.get("execution_result", ""),
+        rag_context=final_state.get("rag_context", ""),
         final_report=final_state.get("final_report", ""),
         generated_code=final_state.get("generated_code", ""),
         retry_count=final_state.get("retry_count", 0),

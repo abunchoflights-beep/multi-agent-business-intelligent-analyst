@@ -9,6 +9,7 @@ class AgentState(TypedDict):
     selected_tables: List[str]
     data_dir: str
     raw_context: str
+    rag_context: str
     generated_code: str
     execution_result: str
     final_report: str
